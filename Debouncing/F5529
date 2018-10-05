@@ -1,0 +1,52 @@
+//Code provided with the help of Nate Hoffman.
+//To see Hoffman's code, use the following link.
+// https://github.com/RU09342-F18/lab-3-debouncing-and-pwm-gliderman/blob/master/Debouncing/MSP430F5529/main.c
+
+
+#include <msp430.h> 
+#include <msp430f5529.h>
+
+int main(void)
+{
+    WDTCTL = WDTPW | WDTHOLD; // Stop watchdog timer
+
+    UCSCTL4 = SELA_0; // Enable ACLK (32.768 kHz signal)
+
+    P1DIR |= BIT0; // Set P1.0 to output direction
+    P1SEL &= ~BIT0; // P1.0 as I/O
+    P1OUT &= ~BIT0; // P1.0 turn off LED
+    P2DIR &= ~BIT1; // Set P2.1 to input (BUTTON)
+    P2SEL &= ~BIT1; // P2.1 as I/O
+    P2REN |= BIT1; // P2.1 enable resistor
+    P2OUT |= BIT1; // P2.1 pullup resistor
+    P2IES |= BIT1; // P2.1 high-to-low transition
+    P2IE |= BIT1; // Enable P2.1 interrupt
+
+    TA0CTL = TASSEL_1 + MC_0 + TACLR; // ACLK, off, clear
+
+    TA0CCR0 = 64;
+
+    _BIS_SR(LPM3_bits + GIE);
+}
+
+// Utilizing two separate interrupts, the first one does the job of stopping the button bouncing and setting up a small Delay.
+//The second interrupt, which piggy backs off of the first one, gets rid of the first interrupt's interrupt timer and allows
+//checking for the button being pressed. If it is pressed, the LED will toggle.
+
+#pragma vector=PORT2_VECTOR
+__interrupt void Port_2(void)
+{
+    TA0CTL = TASSEL_1 + MC_1 + TACLR + TAIE; // ACLK, up, clear, enable interrupt
+    P2IES ^= BIT1; // P2.1 toggle transition
+    P2IFG &= ~BIT1; // Clear the P2.1 interrupt
+}
+
+#pragma vector=TIMER0_A1_VECTOR
+__interrupt void TIMER0_A1(void)
+{
+    TA0CTL = TASSEL_1 + MC_0 + TACLR; // ACLK, off, clear
+    if (P2IN & BIT1)  // Button is not pressed
+    {
+        P1OUT ^= BIT0;
+    }
+}
